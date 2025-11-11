@@ -5,14 +5,9 @@ use kalosm_sound::{
     AsyncSourceFromStream, DenoisedExt, TranscribeChunkedAudioStreamExt, VoiceActivityStreamExt,
     WhisperBuilder, WhisperSource,
 };
-use rodio::{Decoder, buffer::SamplesBuffer};
-use wasm_timer::Instant;
-use web_sys::{
-    js_sys::{ArrayBuffer, Uint8Array},
-    wasm_bindgen::{JsCast, JsValue, prelude::Closure},
-};
+use web_sys::wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
-use crate::mic::{AudioData, StreamOptions, stream_microphone};
+use crate::mic::{AudioData, stream_microphone};
 
 mod mic;
 
