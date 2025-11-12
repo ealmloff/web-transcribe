@@ -1,16 +1,24 @@
 /**
- * Streams microphone audio and calls the callback with raw audio samples
+ * Streams audio from tab/window capture and calls the callback with raw audio samples
  * @param {Function} callback - Called with { samples, sampleRate } on each audio frame
  * @param {Object} options - Optional configuration { bufferSize: 4096 }
  * @returns {Promise<Function>} Returns a stop function to end the stream
  */
 export async function streamMicrophone(callback, options = {}) {
   const bufferSize = options.bufferSize || 4096;
+  const from_display = options.fromDisplay || false;
 
   // Request microphone access
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {},
-  });
+  let stream;
+  if (from_display) {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+    });
+  } else {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {},
+    });
+  }
 
   // Create audio context
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -78,9 +86,9 @@ export async function streamMicrophone(callback, options = {}) {
     });
   };
 
-  // Connect microphone to worklet
-  const microphone = audioContext.createMediaStreamSource(stream);
-  microphone.connect(workletNode);
+  // Connect captured audio stream to worklet
+  const source = audioContext.createMediaStreamSource(stream);
+  source.connect(workletNode);
   workletNode.connect(audioContext.destination);
 
   // Return stop function
@@ -88,8 +96,8 @@ export async function streamMicrophone(callback, options = {}) {
     if (workletNode) {
       workletNode.disconnect();
     }
-    if (microphone) {
-      microphone.disconnect();
+    if (source) {
+      source.disconnect();
     }
     if (audioContext) {
       audioContext.close();

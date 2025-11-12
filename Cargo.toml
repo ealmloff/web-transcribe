@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
-kalosm-sound = { git = "https://github.com/floneum/floneum", branch = "wasm-kalosm-sound", features = ["denoise"], default-features = false }
+kalosm-sound = { path = "/Users/evanalmloff/Desktop/Github/floneum/interfaces/kalosm-sound" }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 rodio = "0.20"
 futures-util = { version = "0.3.31", features = ["channel"] }

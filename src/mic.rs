@@ -16,11 +16,16 @@ pub struct AudioData {
 pub struct StreamOptions {
     #[serde(rename = "bufferSize")]
     buffer_size: u32,
+    #[serde(rename = "fromDisplay")]
+    from_display: bool,
 }
 
 impl Default for StreamOptions {
     fn default() -> Self {
-        Self { buffer_size: 4096 }
+        Self {
+            buffer_size: 4096,
+            from_display: false,
+        }
     }
 }
 
@@ -29,14 +34,14 @@ impl StreamOptions {
         Self::default()
     }
 
-    /// Set the buffer size (must be power of 2, typically 2048)
-    pub fn set_buffer_size(&mut self, size: u32) {
+    pub fn with_buffer_size(mut self, size: u32) -> Self {
         self.buffer_size = size;
+        self
     }
 
-    /// Get the buffer size
-    pub fn buffer_size(&self) -> u32 {
-        self.buffer_size
+    pub fn with_from_display(mut self, from_display: bool) -> Self {
+        self.from_display = from_display;
+        self
     }
 }
 

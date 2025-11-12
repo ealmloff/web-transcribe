@@ -1848,7 +1848,6 @@ dependencies = [
 [[package]]
 name = "fusor-core"
 version = "0.1.0"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "arc-swap",
  "bytemuck",
@@ -1872,7 +1871,6 @@ dependencies = [
 [[package]]
 name = "fusor-gguf"
 version = "0.1.0"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "bytemuck",
  "enumset",
@@ -2749,7 +2747,6 @@ dependencies = [
 [[package]]
 name = "kalosm-common"
 version = "0.4.0"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "dirs 5.0.1",
  "hf-hub",
@@ -2763,7 +2760,6 @@ dependencies = [
 [[package]]
 name = "kalosm-model-types"
 version = "0.4.0"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "indicatif",
 ]
@@ -2771,7 +2767,6 @@ dependencies = [
 [[package]]
 name = "kalosm-sound"
 version = "0.4.0"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "byteorder",
  "dasp",
@@ -4088,7 +4083,6 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 [[package]]
 name = "rwhisper"
 version = "0.4.1"
-source = "git+https://github.com/floneum/floneum?branch=wasm-kalosm-sound#7276961c6903c29c88b5b066b845d80755a8c6dd"
 dependencies = [
  "byteorder",
  "cpal",

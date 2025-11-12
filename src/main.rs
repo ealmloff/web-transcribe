@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 use futures::stream;
 use futures_util::StreamExt;
@@ -9,8 +11,8 @@ use strum::Display;
 use web_sys::wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
 use crate::{
-    components::select::*,
-    mic::{AudioData, stream_microphone},
+    components::{select::*, toggle_group::*},
+    mic::{AudioData, StreamOptions, stream_microphone},
 };
 
 mod components;
@@ -22,11 +24,12 @@ fn main() {
 
 fn app() -> Element {
     let model = use_signal(|| None);
+    let mut from_display = use_signal(|| false);
     let chunks = use_store(Vec::new);
 
     use_resource(move || async move {
         if let Some(model) = model() {
-            start_web_sys_audio_stream(model, chunks).await;
+            start_web_sys_audio_stream(from_display(), model, chunks).await;
         }
     });
 
@@ -41,12 +44,51 @@ fn app() -> Element {
             display: "flex",
             flex_direction: "column",
             align_items: "center",
-            justify_content: "center",
-            gap: "2rem",
-            ModelSelector { model }
+            gap: "1rem",
 
-            Recording {
-                chunks
+            div {
+                padding_top: "0.5rem",
+                display: "flex",
+                flex_direction: "column",
+                align_items: "center",
+                gap: "0.5rem",
+
+                "Source"
+                ToggleGroup {
+                    horizontal: true,
+                    allow_multiple_pressed: false,
+                    on_pressed_change: move |value: HashSet<_>| from_display.set(value.contains(&1)),
+                    ToggleItem { index: 0usize,
+                        "Mic"
+                    }
+                    ToggleItem { index: 1usize,
+                        "Device"
+                    }
+                }
+            }
+            div {
+                padding_top: "0.5rem",
+                display: "flex",
+                flex_direction: "column",
+                align_items: "center",
+                gap: "0.5rem",
+
+                "Model"
+                ModelSelector { model }
+            }
+
+            div {
+                width: "100vw",
+                height: "100vh",
+                display: "flex",
+                flex_direction: "column",
+                align_items: "center",
+                justify_content: "center",
+                gap: "2rem",
+
+                Recording {
+                    chunks
+                }
             }
         }
     }
@@ -185,7 +227,7 @@ impl ModelSource {
     }
 }
 
-async fn start_recording() -> Option<impl AsyncSource + Unpin> {
+async fn start_recording(from_display: bool) -> Option<impl AsyncSource + Unpin> {
     let (sender, mut receiver) = futures::channel::mpsc::unbounded();
 
     let mut sender = sender.clone();
@@ -195,7 +237,11 @@ async fn start_recording() -> Option<impl AsyncSource + Unpin> {
                 _ = sender.start_send(array_buffer);
             }
         });
-    stream_microphone(on_array_buffer.as_ref().unchecked_ref(), None).ok()?;
+    stream_microphone(
+        on_array_buffer.as_ref().unchecked_ref(),
+        Some(StreamOptions::new().with_from_display(from_display)),
+    )
+    .ok()?;
     on_array_buffer.forget();
 
     let first = receiver.next().await?;
@@ -206,7 +252,11 @@ async fn start_recording() -> Option<impl AsyncSource + Unpin> {
     ))
 }
 
-async fn start_web_sys_audio_stream(model: ModelSource, mut chunks: Store<Vec<EditableSegment>>) {
+async fn start_web_sys_audio_stream(
+    from_display: bool,
+    model: ModelSource,
+    mut chunks: Store<Vec<EditableSegment>>,
+) {
     let source = model.source();
     let model = WhisperBuilder::default()
         .with_source(source)
@@ -214,7 +264,7 @@ async fn start_web_sys_audio_stream(model: ModelSource, mut chunks: Store<Vec<Ed
         .await
         .unwrap();
 
-    let Some(audio) = start_recording().await else {
+    let Some(audio) = start_recording(from_display).await else {
         return;
     };
 
