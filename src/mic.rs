@@ -43,13 +43,16 @@ impl StreamOptions {
 /// Import the JavaScript streamMicrophone function
 #[wasm_bindgen(module = "/src/stream.js")]
 extern "C" {
-    #[wasm_bindgen(js_name = streamMicrophone)]
-    fn stream_microphone_js(callback: &Function, options: JsValue);
+    #[wasm_bindgen(js_name = streamMicrophone, catch)]
+    fn stream_microphone_js(callback: &Function, options: JsValue) -> Result<(), JsValue>;
 }
 
-pub fn stream_microphone(function: &js_sys::Function, options: Option<StreamOptions>) {
+pub fn stream_microphone(
+    function: &js_sys::Function,
+    options: Option<StreamOptions>,
+) -> Result<(), JsValue> {
     let opts = options.unwrap_or_default();
-    let opts_js = serde_wasm_bindgen::to_value(&opts).unwrap();
+    let opts_js = serde_wasm_bindgen::to_value(&opts)?;
 
     stream_microphone_js(function, opts_js)
 }

@@ -2,66 +2,224 @@ use dioxus::prelude::*;
 use futures::stream;
 use futures_util::StreamExt;
 use kalosm_sound::{
-    AsyncSourceFromStream, DenoisedExt, TranscribeChunkedAudioStreamExt, VoiceActivityStreamExt,
-    WhisperBuilder, WhisperSource,
+    AsyncSource, AsyncSourceFromStream, AsyncSourceTranscribeExt, Segment, WhisperBuilder,
+    WhisperSource,
 };
+use strum::Display;
 use web_sys::wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
-use crate::mic::{AudioData, stream_microphone};
+use crate::{
+    components::select::*,
+    mic::{AudioData, stream_microphone},
+};
 
+mod components;
 mod mic;
 
 fn main() {
-    launch(|| {
-        let messages = use_signal(Vec::new);
-        use_future(move || async move {
-            start_web_sys_audio_stream(messages).await;
-        });
-        rsx! {
-            for message in messages.iter() {
-                div {
-                    "{message}"
+    launch(app);
+}
+
+fn app() -> Element {
+    let model = use_signal(|| None);
+    let chunks = use_store(Vec::new);
+
+    use_resource(move || async move {
+        if let Some(model) = model() {
+            start_web_sys_audio_stream(model, chunks).await;
+        }
+    });
+
+    rsx! {
+        document::Stylesheet {
+            href: asset!("/assets/dx-components-theme.css")
+        }
+
+        div {
+            width: "100vw",
+            height: "100vh",
+            display: "flex",
+            flex_direction: "column",
+            align_items: "center",
+            justify_content: "center",
+            gap: "2rem",
+            ModelSelector { model }
+
+            Recording {
+                chunks
+            }
+        }
+    }
+}
+
+struct EditableSegment {
+    original: Segment,
+    text: String,
+}
+
+impl From<Segment> for EditableSegment {
+    fn from(segment: Segment) -> Self {
+        EditableSegment {
+            text: segment.text().to_string(),
+            original: segment,
+        }
+    }
+}
+
+#[component]
+fn Recording(chunks: Store<Vec<EditableSegment>>) -> Element {
+    rsx! {
+        div {
+            width: "70vw",
+            for chunk in chunks.iter() {
+                Chunk {
+                    chunk
                 }
             }
         }
-    });
+    }
 }
 
-async fn start_web_sys_audio_stream(mut messages: Signal<Vec<String>>) {
+#[component]
+fn Chunk(chunk: Store<EditableSegment>) -> Element {
+    let current_chunk = chunk.read();
+    let text = current_chunk.text.as_str();
+    let mut editing = use_signal(|| false);
+    rsx! {
+        if editing() {
+            input {
+                class: "chunk-input",
+                value: text,
+                oninput: move |event| {
+                    let new_text = event.value();
+                    chunk.write().text = new_text;
+                },
+                onblur: move |_| editing.set(false),
+            }
+        } else {
+            div {
+                ondoubleclick: move |_| editing.set(true),
+                {text}
+            }
+        }
+    }
+}
+
+#[component]
+fn ModelSelector(model: WriteSignal<Option<ModelSource>>) -> Element {
+    let sources = ModelSource::ALL.iter().enumerate().map(|(i, f)| {
+        rsx! {
+            SelectOption::<ModelSource> { index: i, value: *f, text_value: "{f}",
+                "{f}"
+                SelectItemIndicator {}
+            }
+        }
+    });
+
+    rsx! {
+        Select::<ModelSource> { placeholder: "Select a model...",
+            on_value_change: move |value| model.set(value),
+            SelectTrigger { aria_label: "Select Trigger", width: "12rem", SelectValue {} }
+            SelectList { aria_label: "Select Demo",
+                {sources}
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Display, PartialEq)]
+enum ModelSource {
+    #[strum(to_string = "Tiny")]
+    Tiny,
+    #[strum(to_string = "Tiny English")]
+    TinyEn,
+    #[strum(to_string = "Base")]
+    Base,
+    #[strum(to_string = "Base English")]
+    BaseEn,
+    #[strum(to_string = "Medium")]
+    Medium,
+    #[strum(to_string = "Medium English")]
+    MediumEn,
+    #[strum(to_string = "Large V3")]
+    LargeV3,
+    #[strum(to_string = "Distiled Medium English")]
+    DistilMediumEn,
+    #[strum(to_string = "Distiled Large V3.5")]
+    DistilLargeV3_5,
+    #[strum(to_string = "Distiled Large V3")]
+    DistilLargeV3,
+    #[strum(to_string = "Large V3 Turbo")]
+    LargeV3Turbo,
+}
+
+impl ModelSource {
+    const ALL: &[Self] = &[
+        ModelSource::Tiny,
+        ModelSource::TinyEn,
+        ModelSource::Base,
+        ModelSource::BaseEn,
+        ModelSource::Medium,
+        ModelSource::MediumEn,
+        ModelSource::LargeV3,
+        ModelSource::DistilMediumEn,
+        ModelSource::DistilLargeV3_5,
+        ModelSource::DistilLargeV3,
+        ModelSource::LargeV3Turbo,
+    ];
+
+    fn source(self) -> WhisperSource {
+        match self {
+            ModelSource::Tiny => WhisperSource::tiny(),
+            ModelSource::TinyEn => WhisperSource::tiny_en(),
+            ModelSource::Base => WhisperSource::base(),
+            ModelSource::BaseEn => WhisperSource::base_en(),
+            ModelSource::Medium => WhisperSource::medium(),
+            ModelSource::MediumEn => WhisperSource::medium_en(),
+            ModelSource::LargeV3 => WhisperSource::large_v3(),
+            ModelSource::DistilMediumEn => WhisperSource::distil_medium_en(),
+            ModelSource::DistilLargeV3_5 => WhisperSource::distil_large_v3_5(),
+            ModelSource::DistilLargeV3 => WhisperSource::distil_large_v3(),
+            ModelSource::LargeV3Turbo => WhisperSource::large_v3_turbo(),
+        }
+    }
+}
+
+async fn start_recording() -> Option<impl AsyncSource + Unpin> {
     let (sender, mut receiver) = futures::channel::mpsc::unbounded();
 
     let mut sender = sender.clone();
     let on_array_buffer: Closure<dyn FnMut(JsValue)> =
         Closure::new(move |array_buffer: JsValue| {
-            let array_buffer: AudioData = serde_wasm_bindgen::from_value(array_buffer).unwrap();
-            _ = sender.start_send(array_buffer);
+            if let Ok(array_buffer) = serde_wasm_bindgen::from_value::<AudioData>(array_buffer) {
+                _ = sender.start_send(array_buffer);
+            }
         });
-    stream_microphone(on_array_buffer.as_ref().unchecked_ref(), None);
+    stream_microphone(on_array_buffer.as_ref().unchecked_ref(), None).ok()?;
     on_array_buffer.forget();
 
-    // Create a new small whisper model
+    let first = receiver.next().await?;
+    let sample_rate = first.sample_rate;
+    Some(AsyncSourceFromStream::new(
+        receiver.flat_map(|content| stream::iter(content.samples)),
+        sample_rate,
+    ))
+}
+
+async fn start_web_sys_audio_stream(model: ModelSource, mut chunks: Store<Vec<EditableSegment>>) {
+    let source = model.source();
     let model = WhisperBuilder::default()
-        .with_source(WhisperSource::tiny_en())
+        .with_source(source)
         .build()
         .await
         .unwrap();
 
-    let first = receiver.next().await.unwrap();
-    let sample_rate = first.sample_rate;
-    let audio = AsyncSourceFromStream::new(
-        receiver.flat_map(|content| stream::iter(content.samples)),
-        sample_rate,
-    );
+    let Some(audio) = start_recording().await else {
+        return;
+    };
 
-    let mut stream = audio
-        .denoise_and_detect_voice_activity()
-        .inspect(|audio| tracing::info!("probability: {:?}", audio.probability))
-        .rechunk_voice_activity()
-        .with_end_threshold(0.01)
-        .transcribe(model);
+    let mut stream = audio.transcribe(model);
     while let Some(text) = stream.next().await {
-        if text.probability_of_no_speech() < 0.1 {
-            messages.push(text.text().into());
-        }
+        chunks.push(text.into());
     }
 }
