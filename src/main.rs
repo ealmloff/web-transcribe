@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
+use dioxus_primitives::slider::SliderValue;
 use futures::stream;
 use futures_util::StreamExt;
 use kalosm_sound::{
@@ -11,7 +12,7 @@ use strum::Display;
 use web_sys::wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
 use crate::{
-    components::{select::*, toggle_group::*},
+    components::{select::*, slider::*, toggle_group::*},
     mic::{AudioData, StreamOptions, stream_microphone},
 };
 
@@ -26,6 +27,7 @@ fn app() -> Element {
     let model = use_signal(|| None);
     let mut from_display = use_signal(|| false);
     let chunks = use_store(Vec::new);
+    let mut speech_threshold = use_signal(|| 0.5);
 
     use_resource(move || async move {
         if let Some(model) = model() {
@@ -73,6 +75,32 @@ fn app() -> Element {
                 align_items: "center",
                 gap: "0.5rem",
 
+                "Speech threshold ({speech_threshold:.2})"
+                Slider {
+                    label: "Speech threshold",
+                    horizontal: true,
+                    min: 0.0,
+                    max: 1.0,
+                    step: 0.05,
+                    default_value: SliderValue::Single(0.5),
+                    on_value_change: move |value: SliderValue| {
+                        // Extract the f64 value from SliderValue::Single
+                        let SliderValue::Single(v) = value;
+                        speech_threshold.set(v);
+                    },
+                    SliderTrack {
+                        SliderRange {}
+                        SliderThumb {}
+                    }
+                }
+            }
+            div {
+                padding_top: "0.5rem",
+                display: "flex",
+                flex_direction: "column",
+                align_items: "center",
+                gap: "0.5rem",
+
                 "Model"
                 ModelSelector { model }
             }
@@ -87,6 +115,7 @@ fn app() -> Element {
                 gap: "2rem",
 
                 Recording {
+                    speech_threshold,
                     chunks
                 }
             }
@@ -109,12 +138,13 @@ impl From<Segment> for EditableSegment {
 }
 
 #[component]
-fn Recording(chunks: Store<Vec<EditableSegment>>) -> Element {
+fn Recording(speech_threshold: ReadSignal<f64>, chunks: Store<Vec<EditableSegment>>) -> Element {
     rsx! {
         div {
             width: "70vw",
             for chunk in chunks.iter() {
                 Chunk {
+                    speech_threshold,
                     chunk
                 }
             }
@@ -123,8 +153,11 @@ fn Recording(chunks: Store<Vec<EditableSegment>>) -> Element {
 }
 
 #[component]
-fn Chunk(chunk: Store<EditableSegment>) -> Element {
+fn Chunk(speech_threshold: ReadSignal<f64>, chunk: Store<EditableSegment>) -> Element {
     let current_chunk = chunk.read();
+    if current_chunk.original.probability_of_no_speech() < speech_threshold() {
+        return VNode::empty();
+    }
     let text = current_chunk.text.as_str();
     let mut editing = use_signal(|| false);
     rsx! {
