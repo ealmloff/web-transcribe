@@ -5,7 +5,7 @@ use dioxus_primitives::slider::SliderValue;
 use futures::stream;
 use futures_util::StreamExt;
 use kalosm_sound::{
-    AsyncSource, AsyncSourceFromStream, AsyncSourceTranscribeExt, Segment, WhisperBuilder,
+    AsyncSource, AsyncSourceFromStream, AsyncSourceTranscribeExt, Segment, Whisper, WhisperBuilder,
     WhisperSource,
 };
 use strum::Display;
@@ -30,11 +30,22 @@ fn app() -> Element {
     let mut speech_threshold = use_signal(|| 0.9);
     let loading_progress = use_signal(|| 0.0);
 
+    let whisper = use_resource(move || async move {
+        match model() {
+            Some(model) => match load_model(model, loading_progress).await {
+                Ok(model) => model,
+                Err(err) => {
+                    tracing::error!("Error loading model: {}", err);
+                    std::future::pending().await
+                }
+            },
+            None => std::future::pending().await,
+        }
+    });
+
     use_resource(move || async move {
-        if let Some(model) = model() {
-            if let Err(err) =
-                start_web_sys_audio_stream(from_display(), model, chunks, loading_progress).await
-            {
+        if let Some(whisper) = whisper() {
+            if let Err(err) = start_web_sys_audio_stream(from_display(), chunks, whisper).await {
                 tracing::error!("Error starting audio stream: {}", err);
             }
         }
@@ -299,18 +310,22 @@ async fn start_recording(from_display: bool) -> Option<impl AsyncSource + Unpin>
     ))
 }
 
-async fn start_web_sys_audio_stream(
-    from_display: bool,
+async fn load_model(
     model: ModelSource,
-    mut chunks: Store<Vec<EditableSegment>>,
     mut loading_progress: Signal<f32>,
-) -> dioxus::Result<()> {
+) -> dioxus::Result<Whisper> {
     let source = model.source();
-    let model = WhisperBuilder::default()
+    Ok(WhisperBuilder::default()
         .with_source(source)
         .build_with_loading_handler(move |progress| loading_progress.set(progress.progress()))
-        .await?;
+        .await?)
+}
 
+async fn start_web_sys_audio_stream(
+    from_display: bool,
+    mut chunks: Store<Vec<EditableSegment>>,
+    model: Whisper,
+) -> dioxus::Result<()> {
     let Some(audio) = start_recording(from_display).await else {
         return Ok(());
     };
