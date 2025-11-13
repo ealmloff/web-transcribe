@@ -12,7 +12,7 @@ use strum::Display;
 use web_sys::wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 
 use crate::{
-    components::{select::*, slider::*, toggle_group::*},
+    components::{progress::*, select::*, slider::*, toggle_group::*},
     mic::{AudioData, StreamOptions, stream_microphone},
 };
 
@@ -27,11 +27,16 @@ fn app() -> Element {
     let model = use_signal(|| None);
     let mut from_display = use_signal(|| false);
     let chunks = use_store(Vec::new);
-    let mut speech_threshold = use_signal(|| 0.5);
+    let mut speech_threshold = use_signal(|| 0.9);
+    let loading_progress = use_signal(|| 0.0);
 
     use_resource(move || async move {
         if let Some(model) = model() {
-            start_web_sys_audio_stream(from_display(), model, chunks).await;
+            if let Err(err) =
+                start_web_sys_audio_stream(from_display(), model, chunks, loading_progress).await
+            {
+                tracing::error!("Error starting audio stream: {}", err);
+            }
         }
     });
 
@@ -79,10 +84,10 @@ fn app() -> Element {
                 Slider {
                     label: "Speech threshold",
                     horizontal: true,
-                    min: 0.0,
+                    min: 0.8,
                     max: 1.0,
-                    step: 0.05,
-                    default_value: SliderValue::Single(0.5),
+                    step: 0.001,
+                    default_value: SliderValue::Single(0.9),
                     on_value_change: move |value: SliderValue| {
                         // Extract the f64 value from SliderValue::Single
                         let SliderValue::Single(v) = value;
@@ -103,6 +108,15 @@ fn app() -> Element {
 
                 "Model"
                 ModelSelector { model }
+
+                if model.read().is_some() && loading_progress() < 1.0 {
+                    "Loading..."
+                    Progress {
+                        value: loading_progress() as f64,
+                        max: 1.0,
+                        ProgressIndicator {}
+                    }
+                }
             }
 
             div {
@@ -155,7 +169,7 @@ fn Recording(speech_threshold: ReadSignal<f64>, chunks: Store<Vec<EditableSegmen
 #[component]
 fn Chunk(speech_threshold: ReadSignal<f64>, chunk: Store<EditableSegment>) -> Element {
     let current_chunk = chunk.read();
-    if current_chunk.original.probability_of_no_speech() < speech_threshold() {
+    if 1.0 - current_chunk.original.probability_of_no_speech() > speech_threshold() {
         return VNode::empty();
     }
     let text = current_chunk.text.as_str();
@@ -289,20 +303,22 @@ async fn start_web_sys_audio_stream(
     from_display: bool,
     model: ModelSource,
     mut chunks: Store<Vec<EditableSegment>>,
-) {
+    mut loading_progress: Signal<f32>,
+) -> dioxus::Result<()> {
     let source = model.source();
     let model = WhisperBuilder::default()
         .with_source(source)
-        .build()
-        .await
-        .unwrap();
+        .build_with_loading_handler(move |progress| loading_progress.set(progress.progress()))
+        .await?;
 
     let Some(audio) = start_recording(from_display).await else {
-        return;
+        return Ok(());
     };
 
     let mut stream = audio.transcribe(model);
     while let Some(text) = stream.next().await {
         chunks.push(text.into());
     }
+
+    Ok(())
 }

@@ -2749,6 +2749,7 @@ name = "kalosm-common"
 version = "0.4.0"
 dependencies = [
  "dirs 5.0.1",
+ "futures-util",
  "hf-hub",
  "httpdate",
  "kalosm-model-types",
@@ -3906,10 +3907,12 @@ dependencies = [
  "system-configuration 0.5.1",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "winreg",
 ]
