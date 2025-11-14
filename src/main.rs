@@ -61,71 +61,81 @@ fn app() -> Element {
             height: "100vh",
             display: "flex",
             flex_direction: "column",
-            align_items: "center",
+            align_items: "between",
+            justify_content: "center",
             gap: "1rem",
 
             div {
-                padding_top: "0.5rem",
                 display: "flex",
-                flex_direction: "column",
+                padding: "5vw 10vw",
+                flex_direction: "row",
                 align_items: "center",
-                gap: "0.5rem",
+                justify_content: "space-between",
+                gap: "1rem",
 
-                "Source"
-                ToggleGroup {
-                    horizontal: true,
-                    allow_multiple_pressed: false,
-                    on_pressed_change: move |value: HashSet<_>| from_display.set(value.contains(&1)),
-                    ToggleItem { index: 0usize,
-                        "Mic"
-                    }
-                    ToggleItem { index: 1usize,
-                        "Device"
-                    }
-                }
-            }
-            div {
-                padding_top: "0.5rem",
-                display: "flex",
-                flex_direction: "column",
-                align_items: "center",
-                gap: "0.5rem",
+                div {
+                    padding_top: "0.5rem",
+                    display: "flex",
+                    flex_direction: "column",
+                    align_items: "center",
+                    gap: "0.5rem",
 
-                "Speech threshold ({speech_threshold:.2})"
-                Slider {
-                    label: "Speech threshold",
-                    horizontal: true,
-                    min: 0.8,
-                    max: 1.0,
-                    step: 0.001,
-                    default_value: SliderValue::Single(0.9),
-                    on_value_change: move |value: SliderValue| {
-                        // Extract the f64 value from SliderValue::Single
-                        let SliderValue::Single(v) = value;
-                        speech_threshold.set(v);
-                    },
-                    SliderTrack {
-                        SliderRange {}
-                        SliderThumb {}
+                    "Source"
+                    ToggleGroup {
+                        horizontal: true,
+                        allow_multiple_pressed: false,
+                        on_pressed_change: move |value: HashSet<_>| from_display.set(value.contains(&1)),
+                        ToggleItem { index: 0usize,
+                            "Mic"
+                        }
+                        ToggleItem { index: 1usize,
+                            "Device"
+                        }
                     }
                 }
-            }
-            div {
-                padding_top: "0.5rem",
-                display: "flex",
-                flex_direction: "column",
-                align_items: "center",
-                gap: "0.5rem",
+                div {
+                    padding_top: "0.5rem",
+                    display: "flex",
+                    flex_direction: "column",
+                    align_items: "center",
+                    gap: "0.5rem",
 
-                "Model"
-                ModelSelector { model }
-
-                if model.read().is_some() && loading_progress() < 1.0 {
-                    "Loading..."
-                    Progress {
-                        value: loading_progress() as f64,
+                    "Speech threshold ({speech_threshold:.2})"
+                    Slider {
+                        label: "Speech threshold",
+                        horizontal: true,
+                        min: 0.8,
                         max: 1.0,
-                        ProgressIndicator {}
+                        step: 0.001,
+                        default_value: SliderValue::Single(0.9),
+                        on_value_change: move |value: SliderValue| {
+                            // Extract the f64 value from SliderValue::Single
+                            let SliderValue::Single(v) = value;
+                            speech_threshold.set(v);
+                        },
+                        SliderTrack {
+                            SliderRange {}
+                            SliderThumb {}
+                        }
+                    }
+                }
+                div {
+                    padding_top: "0.5rem",
+                    display: "flex",
+                    flex_direction: "column",
+                    align_items: "center",
+                    gap: "0.5rem",
+
+                    "Model"
+                    ModelSelector { model }
+
+                    if model.read().is_some() && loading_progress() < 1.0 {
+                        "Loading..."
+                        Progress {
+                            value: loading_progress() as f64,
+                            max: 1.0,
+                            ProgressIndicator {}
+                        }
                     }
                 }
             }
@@ -180,7 +190,7 @@ fn Recording(speech_threshold: ReadSignal<f64>, chunks: Store<Vec<EditableSegmen
 #[component]
 fn Chunk(speech_threshold: ReadSignal<f64>, chunk: Store<EditableSegment>) -> Element {
     let current_chunk = chunk.read();
-    if 1.0 - current_chunk.original.probability_of_no_speech() > speech_threshold() {
+    if 1.0 - current_chunk.original.probability_of_no_speech() < speech_threshold() {
         return VNode::empty();
     }
     let text = current_chunk.text.as_str();
